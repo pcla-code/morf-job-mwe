@@ -50,7 +50,8 @@ def fetch_start_end_date(course_name, run, date_csv="coursera_course_dates.csv")
     :return: tuple of datetime objects (course_start, course_end)
     """
     full_course_name = "{0}-{1}".format(course_name, run)
-    date_df = pd.read_csv(date_csv, usecols=[0, 2, 3]).set_index("course")
+    date_df = pd.read_csv(date_csv, encoding="ISO-8859-1",
+                          usecols=[0, 2, 3]).set_index("course")
     course_start = datetime.strptime(
         date_df.loc[full_course_name].start_date, "%m/%d/%y")
     course_end = datetime.strptime(
