@@ -9,8 +9,9 @@ pip install morf-job-api
 pip install requests
 ```
 ## What should I submit?
-We recommend you first run the [Minimum Working Example](MWEREADME.md).
-If this sucessfully runs, you will know that your API key is valid and that you have the correct version of the API installed
+We recommend you first submit the [Minimum Working Example](MWEREADME.md).
+If this sucessfully runs, you will know that your API key is valid and that you have the correct version of the API installed.
+In the documentation we point out where each step of the processes is happening. You can also experiment with minor alterations.
 ## How do I submit?
 Once you have your job ready you'll need to write a short script to submit it. An example is below.
 ```python
