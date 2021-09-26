@@ -17,4 +17,4 @@ RUN apt install -y nano
 ADD mwe.py mwe.py
 ADD workflow workflow
 # define entrypoint
-ENTRYPOINT ["/bin/sh", "-c", "sleep infinity"]
+ENTRYPOINT ["python3", "mwe.py"]
