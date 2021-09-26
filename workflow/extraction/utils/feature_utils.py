@@ -35,13 +35,31 @@ from math import ceil
 from os import path, makedirs, listdir
 import re
 from collections import defaultdict, Counter
-
 import pandas as pd
+import requests
 
 MILLISECONDS_IN_SECOND = 1000
 
 
-def fetch_start_end_date(course_name, run, date_csv="coursera_course_dates.csv"):
+# def fetch_start_end_date(course_name, run, date_csv="coursera_course_dates.csv"):
+#     """
+#     Fetch course start end end date (so user does not have to specify them directly).
+#     :param course_name: Short name of course.
+#     :param run: run number
+#     :param date_csv: Path to csv of course start/end dates.
+#     :return: tuple of datetime objects (course_start, course_end)
+#     """
+#     full_course_name = "{0}-{1}".format(course_name, run)
+#     date_df = pd.read_csv(date_csv, encoding="ISO-8859-1",
+#                           usecols=[0, 2, 3]).set_index("course")
+#     course_start = datetime.strptime(
+#         date_df.loc[full_course_name].start_date, "%m/%d/%y")
+#     course_end = datetime.strptime(
+#         date_df.loc[full_course_name].end_date, "%m/%d/%y")
+#     return (course_start, course_end)
+
+
+def fetch_start_end_date(course_name,  date_csv="coursera_course_dates.csv"):
     """
     Fetch course start end end date (so user does not have to specify them directly).
     :param course_name: Short name of course.
@@ -49,13 +67,12 @@ def fetch_start_end_date(course_name, run, date_csv="coursera_course_dates.csv")
     :param date_csv: Path to csv of course start/end dates.
     :return: tuple of datetime objects (course_start, course_end)
     """
-    full_course_name = "{0}-{1}".format(course_name, run)
     date_df = pd.read_csv(date_csv, encoding="ISO-8859-1",
                           usecols=[0, 2, 3]).set_index("course")
     course_start = datetime.strptime(
-        date_df.loc[full_course_name].start_date, "%m/%d/%y")
+        date_df.loc[course_name].start_date, "%m/%d/%y")
     course_end = datetime.strptime(
-        date_df.loc[full_course_name].end_date, "%m/%d/%y")
+        date_df.loc[course_name].end_date, "%m/%d/%y")
     return (course_start, course_end)
 
 
@@ -92,7 +109,11 @@ def timestamp_week(timestamp, course_start, course_end):
         return None
 
 
-def extract_users(coursera_clickstream_file, course_start, course_end):
+def execute_mysql_query(query, db_name):
+    return requests.get('http://mysql_proxy/sql', data={"query": query, "db_name": db_name}).json()
+
+
+def extract_users(course):
     """
     Assemble list of all users in clickstream.
     :param coursera_clickstream_file: gzipped Coursera clickstream file
@@ -100,21 +121,8 @@ def extract_users(coursera_clickstream_file, course_start, course_end):
     :param course_end: datetime object for last day of course (generated from user input)
     :return: Python set of all unique user IDs that registered any activity in clickstream log
     """
-    users = set()
-    linecount = 0  # indexes line number
-    with gzip.open(coursera_clickstream_file, "r") as f:
-        for line in f:
-            try:
-                log_entry = loads(line.decode("utf-8"))
-                user = log_entry.get("username")
-                users.add(user)
-            except ValueError as e1:
-                print("Warning: invalid log line {0}: {1}".format(
-                    linecount, e1))
-            except Exception as e:
-                print("Warning: invalid log line {0}: {1}\n{2}".format(
-                    linecount, e, line))
-            linecount += 1
+    query = """select session_user_id from hash_mapping;"""
+    users = execute_mysql_query(query, course)
     return users
 
 
@@ -136,7 +144,7 @@ def extract_forum_posts(forumposts, forumcomments, users, course_start, course_e
     :return: a pandas.DataFrame with columns userID, week, forum_posts
     """
     n_weeks = course_len(course_start, course_end)
-    output = {user: {n: 0 for n in range(n_weeks + 1)} for user in users}
+    output = {user[0]: {n: 0 for n in range(n_weeks + 1)} for user in users[1]}
     with open(forumposts) as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
@@ -147,8 +155,6 @@ def extract_forum_posts(forumposts, forumcomments, users, course_start, course_e
                 try:  # increment weekly post count for that user
                     output[suid][week] += 1
                 except KeyError:  # user posted in forums but registered no clickstream activity; create entry for user
-                    print(
-                        "Warning: user {0} posted in forum but not in course users list.".format(suid))
                     output[suid] = {n: 0 for n in range(n_weeks + 1)}
                     output[suid][week] = 1
     with open(forumcomments) as csvfile:
@@ -161,10 +167,12 @@ def extract_forum_posts(forumposts, forumcomments, users, course_start, course_e
                 try:
                     output[suid][week] += 1
                 except KeyError:  # this means user posted in forums but somehow registered no clickstream activity
-                    print(
-                        "Warning: user {0} commented in forum but not in course users list.".format(suid))
                     output[suid] = {n: 0 for n in range(n_weeks + 1)}
                     output[suid][week] = 1
+    with open("myfile.txt", "a") as file1:
+        for key, val in output.items():
+            file1.write(str(key) + ' ' + str(val) + '\n')
+
     post_list = [(user, week, posts)
                  for user, user_data in output.items()
                  for week, posts in user_data.items()]
@@ -203,12 +211,10 @@ def generate_weekly_csv(df_in, out_dir, i):
     :return: Nothing returned; writes csv files to out_dir.
     """
     if not path.exists(out_dir):
-        print(out_dir + " doesn't exist. creating ...")
         makedirs(out_dir)
     df_out = df_in.copy()
     wk_appended_df = generate_appended_xing_csv(df_in, i)
     destfile = "{}/morf_mwe_feats.csv".format(out_dir, i)
-    print(destfile)
     wk_appended_df.to_csv(destfile)
 
 
@@ -225,14 +231,13 @@ def extract_features(forumfile, commentfile, users, course_start, course_end):
     :param course_end: datetime object for last day of course (generated from user input)
     :return: pandas.DataFrame of features by user id and week.
     """
-    print("Extracting forum posts...")
     forumposts = extract_forum_posts(
         forumfile, commentfile, users, course_start, course_end)
     features_df = forumposts.reset_index().set_index("userID")
     return features_df
 
 
-def main(course, session, n_feature_weeks=4, out_dir="/temp-data"):
+def main(course, n_feature_weeks=4, out_dir="/temp-data"):
     """
     Extract counts of forum posts by week and write to /output.
     :param course: Coursera course slug (string).
@@ -240,25 +245,19 @@ def main(course, session, n_feature_weeks=4, out_dir="/temp-data"):
     :param n_feature_weeks: number of weeks of features to consider (int).
     :return: None; writes output for weekly CSV file in /output.
     """
-    session_dir = "/morf-data/{0}/{1}/".format(course, session)
-    temp_dir = "/temp-data/{0}/{1}/".format(course, session)
-    clickstream = [x for x in listdir(
-        session_dir) if x.endswith("clickstream_export.gz")][0]
-    clickstream_fp = "{0}{1}".format(session_dir, clickstream)
+    temp_dir = "/temp-data/{}/".format(course)
     forumfile = "{0}forum_posts.csv".format(temp_dir)
     commentfile = "{0}forum_comments.csv".format(temp_dir)
-    datefile = "{0}coursera_course_dates.csv".format('/morf-data/')
-    course_start, course_end = fetch_start_end_date(course, session, datefile)
+    datefile = "{0}coursera_course_dates_with_underscore.csv".format(
+        '/morf-data/')
+    course_start, course_end = fetch_start_end_date(course, datefile)
     # build features
-    print("Extracting users...")
-    users = extract_users(clickstream_fp, course_start, course_end)
-    print("Complete. Extracting features...")
+    users = extract_users(course)
     feats_df = extract_features(
         forumfile, commentfile, users, course_start, course_end)
     # write output
     generate_weekly_csv(feats_df, out_dir=out_dir + '/' +
-                        course + '/' + session, i=n_feature_weeks)
-    print("Output written to {0}".format(out_dir))
+                        course + '/', i=n_feature_weeks)
 
 
 if __name__ == "__main__":
