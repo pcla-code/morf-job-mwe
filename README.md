@@ -10,9 +10,9 @@ MORF is constantly under development and if there is something that you would
 like to do with MORF that it not currently possible, we would love to hear from
 you!
 
-## So what is a MORF Job?
+## So what is a MORF job?
 A MORF job has two major components (1) Code to submit your job and (2) Code to
-build and run your job. Both components are outline below.
+build and run your job. Both components are outlined below.
 
 ### Code to submit
 This will be a short python script (an example is at the end of this page)
@@ -30,8 +30,8 @@ If your analysis is in python, it is likely you can use a docker file very simil
 
 When it comes to the code for your analysis, you have more freedom. You can control
 what data is pulled from the MORF database and how it is then processed. Your predictive models
-can be as complex, or as simple as you like. To aid you in extracting your
-features, we have some sample data avaialble upon request.
+can be as complex, or as simple, as you like. To aid you in extracting your
+features, we have some sample data available upon request.
 
 ## So what do I need?
 1. First you need to request an API key, you can do this via email
