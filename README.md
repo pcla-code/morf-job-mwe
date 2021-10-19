@@ -48,14 +48,18 @@ In the documentation we point out where each step of the processes is happening.
 Once you have your job ready you'll need to write a short script to submit it. An example is below.
 ```python
 import morfjobapi as morf
+
 BACKEND_URL = 'https://morf-pcla.education/api/jobs'
 JOB_ZIP_FILE_LOCATION = 'path_to_morf-job-mwe-main.zip'
 API_KEY = 'your_API_key'
+
 job_config = {
  'job_zip_file': JOB_ZIP_FILE_LOCATION,
  'morf_api_endpoint': BACKEND_URL,
  'api_key': API_KEY
 }
+
+morf.submit_job(job_config)
 ```
 
 ## What's Next?
