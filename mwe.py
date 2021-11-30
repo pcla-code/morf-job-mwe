@@ -32,8 +32,8 @@ from workflow.extraction.utils.dataset_utils import build_course_dataset
 from workflow.ml.train_test import train_test_course
 
 if __name__ == "__main__":
-    course_name = 'accounting_002'
+    course_name = 'accounting_001'
     label_type = 'dropout'
-    extract_data(course_name, 10)
+    extract_data(course_name, 10, label_type)
     build_course_dataset(course_name, label_type)
     train_test_course(course_name)

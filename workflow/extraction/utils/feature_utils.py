@@ -113,7 +113,7 @@ def execute_mysql_query(query, db_name):
     return requests.get('http://mysql_proxy/sql', data={"query": query, "db_name": db_name}).json()
 
 
-def extract_users(course):
+def extract_users(course, label_type):
     """
     Assemble list of all users in clickstream.
     :param coursera_clickstream_file: gzipped Coursera clickstream file
@@ -123,6 +123,15 @@ def extract_users(course):
     """
     query = """select session_user_id from hash_mapping;"""
     users = execute_mysql_query(query, course)
+
+    labels_train = pd.read_csv('/morf-data/labels-train-with-underscore.csv', low_memory=False)
+    labels_train = labels_train[(labels_train['course'] == course) & (
+        labels_train['label_type'] == label_type)]
+    labels_test = pd.read_csv('/morf-data/labels-test-with-underscore.csv', low_memory=False)
+    labels_test = labels_test[(labels_test['course'] == course) & (
+        labels_test['label_type'] == label_type)]
+    users=pd.concat([labels_train, labels_test])['userID']
+
     return users
 
 
@@ -144,7 +153,7 @@ def extract_forum_posts(forumposts, forumcomments, users, course_start, course_e
     :return: a pandas.DataFrame with columns userID, week, forum_posts
     """
     n_weeks = course_len(course_start, course_end)
-    output = {user[0]: {n: 0 for n in range(n_weeks + 1)} for user in users[1]}
+    output = {user: {n: 0 for n in range(n_weeks + 1)} for user in users}
     with open(forumposts) as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
@@ -237,7 +246,7 @@ def extract_features(forumfile, commentfile, users, course_start, course_end):
     return features_df
 
 
-def main(course, n_feature_weeks=4, out_dir="/temp-data"):
+def main(course, label_type, n_feature_weeks=4, out_dir="/temp-data"):
     """
     Extract counts of forum posts by week and write to /output.
     :param course: Coursera course slug (string).
@@ -252,7 +261,7 @@ def main(course, n_feature_weeks=4, out_dir="/temp-data"):
         '/morf-data/')
     course_start, course_end = fetch_start_end_date(course, datefile)
     # build features
-    users = extract_users(course)
+    users = extract_users(course, label_type)
     feats_df = extract_features(
         forumfile, commentfile, users, course_start, course_end)
     # write output
