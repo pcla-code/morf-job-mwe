@@ -32,7 +32,7 @@ import gzip
 import itertools
 from json import loads
 from math import ceil
-from os import path, makedirs, listdir
+import os
 import re
 from collections import defaultdict, Counter
 
@@ -116,6 +116,20 @@ def extract_users(coursera_clickstream_file, course_start, course_end):
                     linecount, e, line))
             linecount += 1
     return users
+
+
+def get_users(course, label_type):
+    dir = '/temp-data/' + course
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    labels_train = pd.read_csv('/morf-data/labels-train.csv', low_memory=False)
+    labels_train = labels_train[(labels_train['course'] == course) & (
+        labels_train['label_type'] == label_type)]
+    labels_test = pd.read_csv('/morf-data/labels-test.csv', low_memory=False)
+    labels_test = labels_test[(labels_test['course'] == course) & (
+        labels_test['label_type'] == label_type)]
+    labels = pd.concat([labels_train, labels_test])
+    return (labels['userID'].unique())
 
 
 def extract_forum_posts(forumposts, forumcomments, users, course_start, course_end):
@@ -202,9 +216,9 @@ def generate_weekly_csv(df_in, out_dir, i):
     :param i: week to generate features for
     :return: Nothing returned; writes csv files to out_dir.
     """
-    if not path.exists(out_dir):
+    if not os.path.exists(out_dir):
         print(out_dir + " doesn't exist. creating ...")
-        makedirs(out_dir)
+        os.makedirs(out_dir)
     df_out = df_in.copy()
     wk_appended_df = generate_appended_xing_csv(df_in, i)
     destfile = "{}/morf_mwe_feats.csv".format(out_dir, i)
@@ -232,7 +246,7 @@ def extract_features(forumfile, commentfile, users, course_start, course_end):
     return features_df
 
 
-def main(course, session, n_feature_weeks=4, out_dir="/temp-data"):
+def main(course, session, label_type, n_feature_weeks=4, out_dir="/temp-data"):
     """
     Extract counts of forum posts by week and write to /output.
     :param course: Coursera course slug (string).
@@ -242,7 +256,7 @@ def main(course, session, n_feature_weeks=4, out_dir="/temp-data"):
     """
     session_dir = "/morf-data/{0}/{1}/".format(course, session)
     temp_dir = "/temp-data/{0}/{1}/".format(course, session)
-    clickstream = [x for x in listdir(
+    clickstream = [x for x in os.listdir(
         session_dir) if x.endswith("clickstream_export.gz")][0]
     clickstream_fp = "{0}{1}".format(session_dir, clickstream)
     forumfile = "{0}forum_posts.csv".format(temp_dir)
@@ -251,7 +265,9 @@ def main(course, session, n_feature_weeks=4, out_dir="/temp-data"):
     course_start, course_end = fetch_start_end_date(course, session, datefile)
     # build features
     print("Extracting users...")
-    users = extract_users(clickstream_fp, course_start, course_end)
+
+    users = get_users(course, label_type)
+    #users = extract_users(clickstream_fp, course_start, course_end)
     print("Complete. Extracting features...")
     feats_df = extract_features(
         forumfile, commentfile, users, course_start, course_end)
