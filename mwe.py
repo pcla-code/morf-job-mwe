@@ -34,6 +34,6 @@ from workflow.ml.train_test import train_test_course
 if __name__ == "__main__":
     course_name = 'accounting'
     label_type = 'dropout'
-    extract_sessions(course_name)
+    extract_sessions(course_name, label_type)
     build_course_dataset(course_name, label_type)
     train_test_course(course_name)

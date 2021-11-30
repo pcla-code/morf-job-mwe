@@ -12,9 +12,10 @@ RUN pip3 install pandas numpy scikit-learn
 
 # install MySQL and add configurations
 RUN echo "mysql-server mysql-server/root_password password root" | debconf-set-selections && \
-  echo "mysql-server mysql-server/root_password_again password root" | debconf-set-selections && \
-  apt-get -y install mysql-server && \
-  echo "secure-file-priv = \"\"" >>  /etc/mysql/mysql.conf.d/mysqld.cnf
+    echo "mysql-server mysql-server/root_password_again password root" | debconf-set-selections && \
+    apt-get update && \
+    apt-get -y install mysql-server && \
+    echo "secure-file-priv = \"\"" >>  /etc/mysql/mysql.conf.d/mysqld.cnf
 RUN usermod -d /var/lib/mysql/ mysql
 
 # add scripts
