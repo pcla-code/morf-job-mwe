@@ -27,13 +27,13 @@ Note that this script uses the --mode parameter from docker run to control the f
 This script is structured to utilize the input and output contract of the extract_session() and train_course() functions from the MORF API.
 """
 
-from workflow.extraction.extractors import extract_sessions
+from workflow.extraction.extractors import extract_data
 from workflow.extraction.utils.dataset_utils import build_course_dataset
 from workflow.ml.train_test import train_test_course
 
 if __name__ == "__main__":
-    course_name = 'accounting'
+    course_name = 'accounting_001'
     label_type = 'dropout'
-    extract_sessions(course_name, label_type)
+    extract_data(course_name, 10, label_type)
     build_course_dataset(course_name, label_type)
     train_test_course(course_name)
