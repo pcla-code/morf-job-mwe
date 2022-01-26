@@ -32,7 +32,7 @@ TEMP_DIR = "/temp-data/"
 
 
 def execute_mysql_query(query, db_name):
-    return requests.get('http://mysql_proxy/sql', data={"query": query, "db_name": db_name})
+    return requests.get('http://course_database_proxy/sql', data={"query": query, "db_name": db_name, "course_platform": "coursera"}).json()
 
 
 def extract_coursera_sql_data(course, forum_comment_filename="forum_comments.csv", forum_post_filename="forum_posts.csv"):
@@ -47,13 +47,13 @@ def extract_coursera_sql_data(course, forum_comment_filename="forum_comments.csv
     logging.basicConfig(filename='/output/logs.log', level=logging.DEBUG)
     query = """SELECT thread_id , post_time , b.session_user_id FROM forum_comments as a LEFT JOIN hash_mapping as b ON a.user_id = b.user_id WHERE a.is_spam != 1 ORDER BY post_time;"""
     subprocess.call("mkdir -p " + "/temp-data/" + course, shell=True)
-    forum_comments = execute_mysql_query(query, course).json()
+    forum_comments = execute_mysql_query(query, course)
     df = pd.DataFrame(list(forum_comments[3]), columns=forum_comments[0:3])
     df.to_csv(os.path.join(
         "/temp-data/" + course + '/', forum_comment_filename), index=False)
     # execute forum post query and send to csv
     query = """SELECT id , thread_id , post_time , a.user_id , public_user_id , session_user_id , eventing_user_id FROM forum_posts as a LEFT JOIN hash_mapping as b ON a.user_id = b.user_id WHERE is_spam != 1 ORDER BY post_time;"""
-    forum_posts = execute_mysql_query(query, course).json()
+    forum_posts = execute_mysql_query(query, course)
     df = pd.DataFrame(list(forum_posts[7]), columns=forum_posts[0:7])
     df.to_csv(os.path.join(
         "/temp-data/" + course + '/', forum_post_filename), index=False)

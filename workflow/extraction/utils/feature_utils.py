@@ -24,19 +24,22 @@ Takes gzipped Coursera clickstream/log files as input and returns a single featu
 This is a minimum working example for MORF 2.0.
 """
 
-from argparse import ArgumentParser
-from bisect import bisect_left
 import csv
-from datetime import datetime, timedelta
 import gzip
 import itertools
+import re
+from argparse import ArgumentParser
+from bisect import bisect_left
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta
 from json import loads
 from math import ceil
-from os import path, makedirs, listdir
-import re
-from collections import defaultdict, Counter
+from os import listdir, makedirs, path
+
 import pandas as pd
 import requests
+
+from .sql_utils import execute_mysql_query
 
 MILLISECONDS_IN_SECOND = 1000
 
@@ -59,7 +62,7 @@ MILLISECONDS_IN_SECOND = 1000
 #     return (course_start, course_end)
 
 
-def fetch_start_end_date(course_name,  date_csv="coursera_course_dates.csv"):
+def fetch_start_end_date(course_name, date_csv="coursera_course_dates.csv"):
     """
     Fetch course start end end date (so user does not have to specify them directly).
     :param course_name: Short name of course.
@@ -67,12 +70,11 @@ def fetch_start_end_date(course_name,  date_csv="coursera_course_dates.csv"):
     :param date_csv: Path to csv of course start/end dates.
     :return: tuple of datetime objects (course_start, course_end)
     """
-    date_df = pd.read_csv(date_csv, encoding="ISO-8859-1",
-                          usecols=[0, 2, 3]).set_index("course")
-    course_start = datetime.strptime(
-        date_df.loc[course_name].start_date, "%m/%d/%y")
-    course_end = datetime.strptime(
-        date_df.loc[course_name].end_date, "%m/%d/%y")
+    date_df = pd.read_csv(date_csv, encoding="ISO-8859-1", usecols=[0, 2, 3]).set_index(
+        "course"
+    )
+    course_start = datetime.strptime(date_df.loc[course_name].start_date, "%m/%d/%y")
+    course_end = datetime.strptime(date_df.loc[course_name].end_date, "%m/%d/%y")
     return (course_start, course_end)
 
 
@@ -100,17 +102,12 @@ def timestamp_week(timestamp, course_start, course_end):
     """
     timestamp = datetime.fromtimestamp(timestamp / MILLISECONDS_IN_SECOND)
     n_weeks = course_len(course_start, course_end)
-    week_starts = [course_start + timedelta(days=x)
-                   for x in range(0, n_weeks * 7, 7)]
+    week_starts = [course_start + timedelta(days=x) for x in range(0, n_weeks * 7, 7)]
     week_number = bisect_left(week_starts, timestamp) - 1
     if week_number >= 0 and week_number <= n_weeks:
         return week_number
     else:  # invalid week number; either before official course start or after official course end
         return None
-
-
-def execute_mysql_query(query, db_name):
-    return requests.get('http://mysql_proxy/sql', data={"query": query, "db_name": db_name}).json()
 
 
 def extract_users(course, label_type):
@@ -124,13 +121,19 @@ def extract_users(course, label_type):
     query = """select session_user_id from hash_mapping;"""
     users = execute_mysql_query(query, course)
 
-    labels_train = pd.read_csv('/morf-data/labels-train-with-underscore.csv', low_memory=False)
-    labels_train = labels_train[(labels_train['course'] == course) & (
-        labels_train['label_type'] == label_type)]
-    labels_test = pd.read_csv('/morf-data/labels-test-with-underscore.csv', low_memory=False)
-    labels_test = labels_test[(labels_test['course'] == course) & (
-        labels_test['label_type'] == label_type)]
-    users=pd.concat([labels_train, labels_test])['userID']
+    labels_train = pd.read_csv(
+        "/morf-data/labels-train-with-underscore.csv", low_memory=False
+    )
+    labels_train = labels_train[
+        (labels_train["course"] == course) & (labels_train["label_type"] == label_type)
+    ]
+    labels_test = pd.read_csv(
+        "/morf-data/labels-test-with-underscore.csv", low_memory=False
+    )
+    labels_test = labels_test[
+        (labels_test["course"] == course) & (labels_test["label_type"] == label_type)
+    ]
+    users = pd.concat([labels_train, labels_test])["userID"]
 
     return users
 
@@ -180,14 +183,16 @@ def extract_forum_posts(forumposts, forumcomments, users, course_start, course_e
                     output[suid][week] = 1
     with open("myfile.txt", "a") as file1:
         for key, val in output.items():
-            file1.write(str(key) + ' ' + str(val) + '\n')
+            file1.write(str(key) + " " + str(val) + "\n")
 
-    post_list = [(user, week, posts)
-                 for user, user_data in output.items()
-                 for week, posts in user_data.items()]
-    df_post = pd.DataFrame(post_list,
-                           columns=["userID", "week", "forum_posts"])\
-        .set_index("userID")
+    post_list = [
+        (user, week, posts)
+        for user, user_data in output.items()
+        for week, posts in user_data.items()
+    ]
+    df_post = pd.DataFrame(
+        post_list, columns=["userID", "week", "forum_posts"]
+    ).set_index("userID")
     return df_post
 
 
@@ -198,17 +203,15 @@ def generate_appended_xing_csv(df_in, week):
     :param week: Week to create appended feature set for (starting at zero, inclusive)
     :return: pandas.DataFrame of appended ('wide') features for weeks in interval [0, week].
     """
-    for i in range(0, week+1):  # append data from weeks 0-current week
+    for i in range(0, week + 1):  # append data from weeks 0-current week
         df_to_append = df_in[df_in.week == i].drop("week", axis=1)
-        df_to_append = df_to_append\
-            .rename(columns=lambda x: "week_{0}_{1}".format(str(i), str(x)))\
-            .reset_index()
+        df_to_append = df_to_append.rename(
+            columns=lambda x: "week_{0}_{1}".format(str(i), str(x))
+        ).reset_index()
         if i == 0:  # nothing to merge on yet; initialize df_app using week 0 features
             df_app = df_to_append.set_index("userID")
         else:  # append features by merging to current feature set
-            df_app = df_app.reset_index()\
-                .merge(df_to_append)\
-                .set_index("userID")
+            df_app = df_app.reset_index().merge(df_to_append).set_index("userID")
     return df_app
 
 
@@ -241,7 +244,8 @@ def extract_features(forumfile, commentfile, users, course_start, course_end):
     :return: pandas.DataFrame of features by user id and week.
     """
     forumposts = extract_forum_posts(
-        forumfile, commentfile, users, course_start, course_end)
+        forumfile, commentfile, users, course_start, course_end
+    )
     features_df = forumposts.reset_index().set_index("userID")
     return features_df
 
@@ -257,28 +261,32 @@ def main(course, label_type, n_feature_weeks=4, out_dir="/temp-data"):
     temp_dir = "/temp-data/{}/".format(course)
     forumfile = "{0}forum_posts.csv".format(temp_dir)
     commentfile = "{0}forum_comments.csv".format(temp_dir)
-    datefile = "{0}coursera_course_dates_with_underscore.csv".format(
-        '/morf-data/')
+    datefile = "{0}coursera_course_dates_with_underscore.csv".format("/morf-data/")
     course_start, course_end = fetch_start_end_date(course, datefile)
     # build features
     users = extract_users(course, label_type)
-    feats_df = extract_features(
-        forumfile, commentfile, users, course_start, course_end)
+    feats_df = extract_features(forumfile, commentfile, users, course_start, course_end)
     # write output
-    generate_weekly_csv(feats_df, out_dir=out_dir + '/' +
-                        course + '/', i=n_feature_weeks)
+    generate_weekly_csv(
+        feats_df, out_dir=out_dir + "/" + course + "/", i=n_feature_weeks
+    )
 
 
 if __name__ == "__main__":
     # build parser
     parser = ArgumentParser(
-        description="Create features from Coursera clickstream file.")
-    parser.add_argument("-n", "--course_name",
-                        metavar="course short name [must match name in coursera_course_dates.csv; ex. 'introfinance'",
-                        type=str,
-                        required=True)
-    parser.add_argument("-r", "--run_number",
-                        metavar="3-digit run number", type=str, required=True)
+        description="Create features from Coursera clickstream file."
+    )
+    parser.add_argument(
+        "-n",
+        "--course_name",
+        metavar="course short name [must match name in coursera_course_dates.csv; ex. 'introfinance'",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "-r", "--run_number", metavar="3-digit run number", type=str, required=True
+    )
     # collect input from parser and assign variables
     args = parser.parse_args()
     main(course=args.course_name, session=args.run_number)
